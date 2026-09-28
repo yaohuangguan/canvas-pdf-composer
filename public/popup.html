@@ -1,0 +1,73 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>PDF Composer</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <header class="brand">
+      <div class="mark">P</div>
+      <div>
+        <h1>PDF Composer</h1>
+        <p>Local-first PDF tools for your browser.</p>
+      </div>
+    </header>
+
+    <nav class="tabs" aria-label="PDF Composer tools">
+      <button class="tab active" data-view="merge">Merge PDFs</button>
+      <button class="tab" data-view="canvas">Canvas Course</button>
+    </nav>
+
+    <section id="mergeView" class="view active">
+      <div class="sectionHeading">
+        <div>
+          <h2>Open PDF tabs</h2>
+          <p>Select the PDFs you want, in the order shown.</p>
+        </div>
+        <button id="refreshTabs" class="ghost small">Refresh</button>
+      </div>
+
+      <div id="pdfTabs" class="pdfList"></div>
+      <div id="emptyPdfTabs" class="empty hidden">
+        No open PDF tabs found. Open some PDFs, or add local files below.
+      </div>
+
+      <label class="filePicker">
+        <span>Add local PDFs</span>
+        <input id="localFiles" type="file" accept="application/pdf,.pdf" multiple>
+      </label>
+      <div id="localFileList" class="localList"></div>
+
+      <label class="field">
+        <span>Output file name</span>
+        <input id="mergeFilename" value="Merged PDFs.pdf">
+      </label>
+
+      <button id="mergeButton" class="primary">Merge selected PDFs</button>
+      <div id="mergeStatus" class="status"></div>
+      <p class="privacy">PDFs are merged locally in your browser. Nothing is uploaded.</p>
+    </section>
+
+    <section id="canvasView" class="view">
+      <h2>Canvas Course</h2>
+      <p class="lead">Open a Canvas course Modules page, then collect the course into one review document.</p>
+
+      <div class="checks">
+        <label><input id="pages" type="checkbox" checked> Course pages</label>
+        <label><input id="discussions" type="checkbox"> Discussions</label>
+        <label><input id="assignments" type="checkbox"> Assignments</label>
+        <label><input id="quizzes" type="checkbox"> Quizzes</label>
+        <label><input id="files" type="checkbox"> File / external links</label>
+      </div>
+
+      <button id="canvasButton" class="primary">Build course review</button>
+      <div id="canvasStatus" class="status"></div>
+      <p class="privacy">Uses your existing Canvas login. Course content is not sent to a PDF Composer server.</p>
+    </section>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>
