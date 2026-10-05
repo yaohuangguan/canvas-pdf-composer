@@ -26,7 +26,7 @@ if (watch) {
   const popup = await context({ ...common, entryPoints: ['src/popup.js'], outfile: 'dist/popup.js' })
   const background = await context({ ...common, entryPoints: ['src/background.js'], outfile: 'dist/background.js' })
   await Promise.all([popup.watch(), background.watch()])
-  console.log('Watching PDF Composer…')
+  console.log('Watching Canvas PDF Composer…')
 } else {
   await Promise.all([
     build({ ...common, entryPoints: ['src/popup.js'], outfile: 'dist/popup.js' }),

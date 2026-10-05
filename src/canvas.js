@@ -127,14 +127,85 @@ export async function collectCanvasCourse(options) {
     return wrapper.innerHTML;
   }
 
+  async function captureResource(item, targetUrl, title, kind = 'page') {
+    if (!targetUrl) return {ok: false, error: 'No resource URL available.'};
+
+    return new Promise((resolve) => {
+      chrome.runtime.sendMessage({
+        source: 'pdf-composer',
+        action: 'capture-canvas-resource',
+        exportId,
+        url: targetUrl,
+        title: title || item.title || item.type,
+        itemType: item.type,
+        kind
+      }, (response) => {
+        const lastError = chrome.runtime.lastError;
+        if (lastError) resolve({ok: false, error: lastError.message});
+        else resolve(response || {ok: false, error: 'No response from extension.'});
+      });
+    });
+  }
+
+  function googleSlidesPdfUrl(rawUrl) {
+    try {
+      const parsed = new URL(rawUrl);
+      const match = parsed.pathname.match(/\/presentation\/d\/([^/]+)/);
+      if (!/\.google\.com$/i.test(parsed.hostname) || !match) return null;
+      return `${parsed.origin}/presentation/d/${match[1]}/export/pdf`;
+    } catch {
+      return null;
+    }
+  }
+
   async function loadItem(item) {
-    const fallbackUrl = item.html_url || location.href;
+    const fallbackUrl = item.html_url || item.external_url || location.href;
 
     if (item.type === 'File' || item.type === 'ExternalUrl' || item.type === 'ExternalTool') {
+      let targetUrl = item.external_url || item.html_url || fallbackUrl;
+      let resourceName = item.title || item.type;
+      let kind = 'page';
+      let resourceType = item.type;
+
+      if (item.type === 'File' && item.url) {
+        try {
+          const detail = await fetchJson(item.url);
+          resourceName = detail.display_name || detail.filename || resourceName;
+          resourceType = detail['content-type'] || detail.content_type || resourceType;
+          const lowerName = resourceName.toLowerCase();
+          const isPdf = String(resourceType).toLowerCase().includes('pdf') || lowerName.endsWith('.pdf');
+
+          if (isPdf && detail.url) {
+            targetUrl = detail.url;
+            kind = 'pdf-url';
+          } else {
+            // Canvas commonly exposes an authenticated preview URL for Office documents.
+            targetUrl = detail.preview_url || item.html_url || detail.url || targetUrl;
+            kind = detail.preview_url ? 'page' : 'page';
+          }
+        } catch {}
+      }
+
+      const slidesPdf = googleSlidesPdfUrl(targetUrl);
+      if (slidesPdf) {
+        targetUrl = slidesPdf;
+        kind = 'pdf-url';
+        resourceType = 'Google Slides';
+      }
+
+      showProgress(`Capturing resource: ${resourceName}`);
+      const captured = await captureResource(item, targetUrl, resourceName, kind);
+
       return {
-        html: '<p class="resource-link"><a href="' + escapeHtml(fallbackUrl) +
-          '">Open resource in Canvas</a></p>',
-        sourceUrl: fallbackUrl
+        html: captured.ok
+          ? '<div class="resource-link"><strong>Included in exported PDF:</strong> ' +
+              escapeHtml(resourceName) + '<br><span class="resource-meta">' +
+              escapeHtml(resourceType) + ' · appended after the course review in module order</span></div>'
+          : '<div class="warning"><strong>Could not capture this resource automatically.</strong><br>' +
+              escapeHtml(captured.error || 'Unknown capture error') + '<br><a href="' +
+              escapeHtml(fallbackUrl) + '">Open resource in Canvas</a></div>',
+        sourceUrl: fallbackUrl,
+        failed: !captured.ok
       };
     }
 
@@ -393,11 +464,11 @@ export async function collectCanvasCourse(options) {
   <div class="toolbar">
     <button id="downloadBtn" class="primary">Download PDF</button>
     <button id="printBtn">Print</button>
-    <span class="hint">${includedCount} items · ${modules.length} modules · direct PDF keeps the review layout</span>
+    <span class="hint">${includedCount} items · ${modules.length} modules · course review + captured files, slides and links</span>
   </div>
   <main class="paper">
     <section class="cover">
-      <div class="eyebrow">CANVAS COURSE REVIEW</div>
+      <div class="eyebrow">CANVAS PDF COMPOSER</div>
       <h1>${escapeHtml(course.name || 'Course Review')}</h1>
       <p>Combined automatically from the course Modules structure on ${escapeHtml(new Date().toLocaleString())}.</p>
       <p>${includedCount} included items across ${toc.length} modules.</p>

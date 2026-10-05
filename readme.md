@@ -1,4 +1,4 @@
-# PDF Composer
+# Canvas PDF Composer
 
 A local-first Chrome extension for turning scattered browser documents into one portable PDF.
 
@@ -11,7 +11,7 @@ A local-first Chrome extension for turning scattered browser documents into one 
 - accepts additional local PDF files
 - merges all pages in the browser with `pdf-lib`
 - downloads one combined PDF
-- does not upload PDF bytes to a PDF Composer server
+- does not upload PDF bytes to a Canvas PDF Composer server
 
 Remote HTTP/HTTPS PDFs request host access only when the user starts a merge. Local `file://` PDFs require Chrome's **Allow access to file URLs** toggle; users can always choose the files directly instead.
 
@@ -24,7 +24,7 @@ The Canvas importer grew out of a DIGIHLTH 706 study workflow. From a logged-in 
 - builds a clean combined review page with contents and source links
 - downloads the rendered review as one PDF
 
-The importer does not copy Canvas credentials into PDF Composer.
+The importer does not copy Canvas credentials into Canvas PDF Composer.
 
 ## Development
 
@@ -41,7 +41,7 @@ The local Windows test build is also copied to:
 C:\Users\Administrator\Desktop\canvas-course-exporter
 ```
 
-That compatibility path lets the previously loaded Canvas prototype be reloaded in place while it is renamed to PDF Composer.
+That compatibility path lets the previously loaded Canvas prototype be reloaded in place while it is renamed to Canvas PDF Composer.
 
 ## Publishing note
 
