@@ -4,16 +4,19 @@ export function installDownloadBridge() {
 
   window.addEventListener('message', (event) => {
     const data = event.data;
-    if (!data || data.source !== 'pdf-composer' || data.action !== 'download-review-pdf') return;
+    if (!data || data.source !== 'pdf-composer') return;
+    if (data.action !== 'download-review-pdf' && data.action !== 'capture-canvas-resource') return;
 
     chrome.runtime.sendMessage(data, (response) => {
       const lastError = chrome.runtime.lastError;
       window.postMessage({
         source: 'pdf-composer',
-        action: 'pdf-result',
+        action: data.action === 'capture-canvas-resource' ? 'capture-resource-result' : 'pdf-result',
         exportId: data.exportId,
+        requestId: data.requestId,
         ok: !lastError && !!response?.ok,
-        error: lastError?.message || response?.error || null
+        error: lastError?.message || response?.error || null,
+        extraPages: response?.extraPages || 0
       }, '*');
     });
   });
@@ -129,21 +132,33 @@ export async function collectCanvasCourse(options) {
 
   async function captureResource(item, targetUrl, title, kind = 'page') {
     if (!targetUrl) return {ok: false, error: 'No resource URL available.'};
+    const requestId = exportId + '-' + item.id + '-' + Math.random().toString(36).slice(2);
 
     return new Promise((resolve) => {
-      chrome.runtime.sendMessage({
+      const timer = setTimeout(() => {
+        window.removeEventListener('message', onResult);
+        resolve({ok: false, error: 'Timed out while capturing this resource.'});
+      }, 30_000);
+
+      function onResult(event) {
+        const data = event.data;
+        if (!data || data.source !== 'pdf-composer' || data.action !== 'capture-resource-result' || data.requestId !== requestId) return;
+        clearTimeout(timer);
+        window.removeEventListener('message', onResult);
+        resolve({ok: !!data.ok, error: data.error || null});
+      }
+
+      window.addEventListener('message', onResult);
+      window.postMessage({
         source: 'pdf-composer',
         action: 'capture-canvas-resource',
         exportId,
+        requestId,
         url: targetUrl,
         title: title || item.title || item.type,
         itemType: item.type,
         kind
-      }, (response) => {
-        const lastError = chrome.runtime.lastError;
-        if (lastError) resolve({ok: false, error: lastError.message});
-        else resolve(response || {ok: false, error: 'No response from extension.'});
-      });
+      }, '*');
     });
   }
 

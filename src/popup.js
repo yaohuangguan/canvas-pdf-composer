@@ -171,7 +171,7 @@ async function ensurePdfAccess(urls) {
   if (urls.some((url) => url.startsWith('file:'))) {
     const allowed = await chrome.extension.isAllowedFileSchemeAccess()
     if (!allowed) {
-      throw new Error('Enable “Allow access to file URLs” for PDF Composer, or add those PDFs with “Add local PDFs”.')
+      throw new Error('Enable “Allow access to file URLs” for Canvas PDF Composer, or add those PDFs with “Add local PDFs”.')
     }
   }
 }
@@ -225,9 +225,9 @@ async function mergeSelectedPdfs() {
 
     if (!totalPages) throw new Error('The selected files did not contain any pages.')
 
-    output.setTitle('Merged with PDF Composer')
-    output.setProducer('PDF Composer')
-    output.setCreator('PDF Composer')
+    output.setTitle('Merged with Canvas PDF Composer')
+    output.setProducer('Canvas PDF Composer')
+    output.setCreator('Canvas PDF Composer')
 
     setStatus(status, `Creating ${totalPages}-page PDF…`)
     const bytes = await output.save()
