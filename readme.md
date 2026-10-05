@@ -6,7 +6,7 @@
 [![Chrome](https://img.shields.io/badge/Chrome-120%2B-4285F4?logo=googlechrome&logoColor=white)](#install)
 [![Local first](https://img.shields.io/badge/local--first-yes-16a34a)](#privacy--permissions)
 
-**[Download latest release](https://github.com/yaohuangguan/canvas-pdf-composer/releases/latest/download/canvas-pdf-composer.zip)** · **[All releases](https://github.com/yaohuangguan/canvas-pdf-composer/releases)** · **[Website source](https://github.com/yaohuangguan/canvas-pdf-composer/tree/gh-pages)** · **[Report an issue](https://github.com/yaohuangguan/canvas-pdf-composer/issues)**
+**[Website](https://canvas-pdf-composer.pages.dev/)** · **[Download latest release](https://github.com/yaohuangguan/canvas-pdf-composer/releases/latest/download/canvas-pdf-composer.zip)** · **[All releases](https://github.com/yaohuangguan/canvas-pdf-composer/releases)** · **[Report an issue](https://github.com/yaohuangguan/canvas-pdf-composer/issues)**
 
 Canvas PDF Composer is a local-first Chrome extension for students who want a single review document instead of a course spread across Canvas pages, PDFs, slide decks, files and external links.
 
