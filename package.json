@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch",
-    "check": "node --check src/background.js && node --check src/popup.js"
+    "check": "node --check src/background.js && node --check src/canvas.js && node --check src/popup.js"
   },
   "dependencies": {
     "pdf-lib": "^1.17.1"
