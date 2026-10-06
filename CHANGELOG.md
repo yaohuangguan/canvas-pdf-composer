@@ -2,6 +2,17 @@
 
 All notable changes to Canvas PDF Composer are documented here.
 
+## v0.2.1 — 2026-10-06
+
+### Fixed
+
+- Recognize Canvas Module `File` items by their stable `content_id`, including URLs such as `/courses/:course/files/:file_id?module_item_id=...`.
+- Fetch original PDF response bytes with the current authenticated Canvas session instead of printing the Canvas file page or Chrome PDF viewer.
+- Use Canvas Files API metadata to distinguish PDFs from Office/DocViewer resources.
+- Increase resource capture timeout for larger lecture slide decks.
+- Add CI syntax/build checks for the Canvas collector and packaged extension.
+
+
 ## v0.2.0 — 2026-10-06
 
 ### Added

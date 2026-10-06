@@ -1,10 +1,20 @@
 {
   "manifest_version": 3,
   "name": "Canvas PDF Composer",
-  "version": "0.2.0",
-  "description": "Merge open PDF tabs locally and turn Canvas course modules into one clean study PDF.",
-  "permissions": ["activeTab", "tabs", "scripting", "downloads", "debugger"],
-  "optional_host_permissions": ["http://*/*", "https://*/*", "file:///*"],
+  "version": "0.2.1",
+  "description": "Turn Canvas modules, PDFs, slides and linked resources into one portable study PDF.",
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "scripting",
+    "downloads",
+    "debugger"
+  ],
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*",
+    "file:///*"
+  ],
   "background": {
     "service_worker": "background.js"
   },

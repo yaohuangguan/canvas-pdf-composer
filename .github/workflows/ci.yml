@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+      - name: Package extension
+        run: cd dist && zip -r ../canvas-pdf-composer.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: canvas-pdf-composer
+          path: canvas-pdf-composer.zip
+      - name: Publish GitHub Release
+        if: github.ref == 'refs/heads/master'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="v$(node -p "require('./package.json').version")"
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release upload "$VERSION" canvas-pdf-composer.zip --clobber
+          else
+            gh release create "$VERSION" canvas-pdf-composer.zip \
+              --title "Canvas PDF Composer $VERSION" \
+              --generate-notes
+          fi

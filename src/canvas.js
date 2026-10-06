@@ -138,7 +138,7 @@ export async function collectCanvasCourse(options) {
       const timer = setTimeout(() => {
         window.removeEventListener('message', onResult);
         resolve({ok: false, error: 'Timed out while capturing this resource.'});
-      }, 30_000);
+      }, 90_000);
 
       function onResult(event) {
         const data = event.data;
@@ -157,6 +157,8 @@ export async function collectCanvasCourse(options) {
         url: targetUrl,
         title: title || item.title || item.type,
         itemType: item.type,
+        itemId: item.id,
+        fileId: item.content_id || null,
         kind
       }, '*');
     });
@@ -182,23 +184,48 @@ export async function collectCanvasCourse(options) {
       let kind = 'page';
       let resourceType = item.type;
 
-      if (item.type === 'File' && item.url) {
-        try {
-          const detail = await fetchJson(item.url);
-          resourceName = detail.display_name || detail.filename || resourceName;
-          resourceType = detail['content-type'] || detail.content_type || resourceType;
-          const lowerName = resourceName.toLowerCase();
-          const isPdf = String(resourceType).toLowerCase().includes('pdf') || lowerName.endsWith('.pdf');
+      if (item.type === 'File') {
+        // Canvas ModuleItem gives us a stable File content_id. Prefer the Files API
+        // even when item.url is absent so URLs such as /courses/:course/files/:id
+        // are treated as files, not generic web pages.
+        const htmlFileId = item.html_url?.match(/\/files\/(\d+)/)?.[1] || null;
+        const fileId = item.content_id || htmlFileId;
+        const apiUrl = item.url || (fileId
+          ? location.origin + '/api/v1/files/' + fileId
+          : null);
 
-          if (isPdf && detail.url) {
-            targetUrl = detail.url;
-            kind = 'pdf-url';
-          } else {
-            // Canvas commonly exposes an authenticated preview URL for Office documents.
-            targetUrl = detail.preview_url || item.html_url || detail.url || targetUrl;
-            kind = detail.preview_url ? 'page' : 'page';
+        if (apiUrl) {
+          try {
+            const detail = await fetchJson(apiUrl);
+            resourceName = detail.display_name || detail.filename || resourceName;
+            resourceType = detail['content-type'] || detail.content_type || resourceType;
+
+            const lowerName = resourceName.toLowerCase();
+            const lowerType = String(resourceType).toLowerCase();
+            const isPdf = lowerType.includes('pdf') || lowerName.endsWith('.pdf');
+            const absoluteUrl = (value) => {
+              if (!value) return null;
+              try { return new URL(value, location.origin).href; } catch { return value; }
+            };
+
+            if (isPdf && detail.url) {
+              // IMPORTANT: do not print the Canvas file page / Chrome PDF viewer.
+              // The background worker reads the original PDF response using the
+              // authenticated Canvas tab and merges those bytes directly.
+              targetUrl = absoluteUrl(detail.url);
+              kind = 'pdf-url';
+            } else {
+              // Office files such as PPT/PPTX still need Canvas DocViewer.
+              targetUrl = absoluteUrl(detail.preview_url) ||
+                absoluteUrl(item.html_url) ||
+                absoluteUrl(detail.url) ||
+                targetUrl;
+              kind = 'page';
+            }
+          } catch (error) {
+            console.warn('Canvas PDF Composer: file metadata lookup failed', fileId, error);
           }
-        } catch {}
+        }
       }
 
       const slidesPdf = googleSlidesPdfUrl(targetUrl);
@@ -272,7 +299,7 @@ export async function collectCanvasCourse(options) {
 
       const items = await fetchPaged(
         location.origin + '/api/v1/courses/' + courseId +
-        '/modules/' + mod.id + '/items?per_page=100'
+        '/modules/' + mod.id + '/items?per_page=100&include[]=content_details'
       );
 
       items.sort((a, b) => (a.position || 0) - (b.position || 0));
