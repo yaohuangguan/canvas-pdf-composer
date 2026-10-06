@@ -5,6 +5,9 @@ on:
   push:
     branches: [master]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -23,3 +26,16 @@ jobs:
         with:
           name: canvas-pdf-composer
           path: canvas-pdf-composer.zip
+      - name: Publish GitHub Release
+        if: github.ref == 'refs/heads/master'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="v$(node -p "require('./package.json').version")"
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release upload "$VERSION" canvas-pdf-composer.zip --clobber
+          else
+            gh release create "$VERSION" canvas-pdf-composer.zip \
+              --title "Canvas PDF Composer $VERSION" \
+              --generate-notes
+          fi
