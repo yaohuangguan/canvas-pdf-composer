@@ -17,3 +17,9 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run build
+      - name: Package extension
+        run: cd dist && zip -r ../canvas-pdf-composer.zip .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: canvas-pdf-composer
+          path: canvas-pdf-composer.zip
