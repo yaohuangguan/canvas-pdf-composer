@@ -26,7 +26,27 @@ function bytesToBase64(bytes) {
   return btoa(binary)
 }
 
-async function waitForLoaded(tabId, timeoutMs = 20_000) {
+function joinBytes(chunks) {
+  const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0)
+  const output = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    output.set(chunk, offset)
+    offset += chunk.length
+  }
+  return output
+}
+
+function looksLikePdf(bytes) {
+  return bytes.length >= 5 &&
+    bytes[0] === 0x25 &&
+    bytes[1] === 0x50 &&
+    bytes[2] === 0x44 &&
+    bytes[3] === 0x46 &&
+    bytes[4] === 0x2d
+}
+
+async function waitForLoaded(tabId, timeoutMs = 30_000) {
   const tab = await chrome.tabs.get(tabId)
   if (tab.status === 'complete') return
 
@@ -63,7 +83,7 @@ async function printTabToPdf(tabId) {
   await chrome.debugger.attach(debuggee, '1.3')
   try {
     await chrome.debugger.sendCommand(debuggee, 'Emulation.setEmulatedMedia', {media: 'screen'})
-    await new Promise((resolve) => setTimeout(resolve, 900))
+    await new Promise((resolve) => setTimeout(resolve, 1800))
     const result = await chrome.debugger.sendCommand(debuggee, 'Page.printToPDF', {
       landscape: false,
       displayHeaderFooter: false,
@@ -83,60 +103,180 @@ async function printTabToPdf(tabId) {
   }
 }
 
-async function fetchPdfInTab(tabId, url) {
+async function readCdpStream(debuggee, handle) {
+  const chunks = []
+  let total = 0
+
+  try {
+    while (true) {
+      const part = await chrome.debugger.sendCommand(debuggee, 'IO.read', {
+        handle,
+        size: 1024 * 1024,
+      })
+
+      if (part.data) {
+        const bytes = part.base64Encoded
+          ? base64ToBytes(part.data)
+          : new TextEncoder().encode(part.data)
+        chunks.push(bytes)
+        total += bytes.length
+        if (total > 200 * 1024 * 1024) {
+          throw new Error('This PDF is larger than the current 200 MB capture limit.')
+        }
+      }
+
+      if (part.eof) break
+    }
+  } finally {
+    await chrome.debugger.sendCommand(debuggee, 'IO.close', {handle}).catch(() => {})
+  }
+
+  return joinBytes(chunks)
+}
+
+async function loadPdfWithCanvasSession(tabId, url) {
+  if (!tabId) throw new Error('Could not find the Canvas source tab.')
+
+  const debuggee = {tabId}
+  await chrome.debugger.attach(debuggee, '1.3')
+
+  try {
+    await chrome.debugger.sendCommand(debuggee, 'Page.enable')
+    const tree = await chrome.debugger.sendCommand(debuggee, 'Page.getFrameTree')
+    const frameId = tree?.frameTree?.frame?.id
+    if (!frameId) throw new Error('Could not resolve the Canvas page frame.')
+
+    const loaded = await chrome.debugger.sendCommand(debuggee, 'Network.loadNetworkResource', {
+      frameId,
+      url,
+      options: {
+        disableCache: true,
+        includeCredentials: true,
+      },
+    })
+
+    const resource = loaded?.resource
+    if (!resource?.success) {
+      throw new Error(resource?.netErrorName || resource?.netError || 'Canvas did not return the file.')
+    }
+    if (resource.httpStatusCode && resource.httpStatusCode >= 400) {
+      throw new Error(`Canvas file request returned HTTP ${resource.httpStatusCode}.`)
+    }
+    if (!resource.stream) {
+      throw new Error('Canvas returned the file without a readable response stream.')
+    }
+
+    const bytes = await readCdpStream(debuggee, resource.stream)
+    if (!looksLikePdf(bytes)) {
+      const type = resource?.mimeType || resource?.headers?.['content-type'] || 'unknown content type'
+      throw new Error(`Expected PDF bytes but Canvas returned ${type}.`)
+    }
+
+    return bytesToBase64(bytes)
+  } finally {
+    await chrome.debugger.detach(debuggee).catch(() => {})
+  }
+}
+
+async function fetchPdfInCanvasTab(tabId, url) {
+  if (!tabId) throw new Error('Could not find the Canvas source tab.')
+
   const debuggee = {tabId}
   await chrome.debugger.attach(debuggee, '1.3')
   try {
     const result = await chrome.debugger.sendCommand(debuggee, 'Runtime.evaluate', {
       expression: `
         (async () => {
-          const response = await fetch(${JSON.stringify(url)}, {credentials:'include', cache:'no-store'})
+          const response = await fetch(${JSON.stringify(url)}, {
+            credentials: 'include',
+            cache: 'no-store',
+            redirect: 'follow'
+          })
           if (!response.ok) throw new Error('HTTP ' + response.status)
-          const type = (response.headers.get('content-type') || '').toLowerCase()
-          if (!type.includes('pdf')) throw new Error('Expected PDF but received ' + (type || 'unknown content type'))
           const bytes = new Uint8Array(await response.arrayBuffer())
+          if (bytes.length < 5 || String.fromCharCode(...bytes.subarray(0, 5)) !== '%PDF-') {
+            throw new Error('Response is not a PDF')
+          }
           let binary = ''
           const chunk = 0x8000
-          for (let i = 0; i < bytes.length; i += chunk) binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+          for (let i = 0; i < bytes.length; i += chunk) {
+            binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+          }
           return btoa(binary)
         })()
       `,
       awaitPromise: true,
       returnByValue: true,
     })
-    if (result.exceptionDetails) throw new Error('Could not fetch the PDF with your signed-in session.')
-    return result.result?.value
+
+    if (result.exceptionDetails || !result.result?.value) {
+      throw new Error('Could not read PDF bytes from the signed-in Canvas page.')
+    }
+    return result.result.value
   } finally {
     await chrome.debugger.detach(debuggee).catch(() => {})
   }
 }
 
-async function captureResource(message) {
+async function capturePdfResource(message, sourceTabId) {
+  const errors = []
+
+  try {
+    return await loadPdfWithCanvasSession(sourceTabId, message.url)
+  } catch (error) {
+    errors.push(error?.message || String(error))
+  }
+
+  try {
+    return await fetchPdfInCanvasTab(sourceTabId, message.url)
+  } catch (error) {
+    errors.push(error?.message || String(error))
+  }
+
   let tab
   try {
     tab = await chrome.tabs.create({url: message.url, active: false})
-    await waitForLoaded(tab.id)
-
-    let data
-    if (message.kind === 'pdf-url') {
-      try {
-        data = await fetchPdfInTab(tab.id, message.url)
-      } catch {
-        // Some document endpoints render a preview instead of exposing PDF bytes to fetch.
-        data = await printTabToPdf(tab.id)
-      }
-    } else {
-      data = await printTabToPdf(tab.id)
-    }
-
-    if (!data) throw new Error('No PDF data was produced.')
-    const bucket = capturedByExport.get(message.exportId) || []
-    bucket.push({title: message.title || 'Resource', data})
-    capturedByExport.set(message.exportId, bucket)
-    return {ok: true, pagesPending: bucket.length}
+    await waitForLoaded(tab.id, 45_000)
+    const data = await printTabToPdf(tab.id)
+    if (!data) throw new Error('No PDF data was produced by the browser fallback.')
+    return data
+  } catch (error) {
+    errors.push(error?.message || String(error))
+    throw new Error(errors.join(' · '))
   } finally {
     if (tab?.id) await chrome.tabs.remove(tab.id).catch(() => {})
   }
+}
+
+async function capturePageResource(message) {
+  let tab
+  try {
+    tab = await chrome.tabs.create({url: message.url, active: false})
+    await waitForLoaded(tab.id, 45_000)
+    const data = await printTabToPdf(tab.id)
+    if (!data) throw new Error('No PDF data was produced.')
+    return data
+  } finally {
+    if (tab?.id) await chrome.tabs.remove(tab.id).catch(() => {})
+  }
+}
+
+async function captureResource(message, sourceTabId) {
+  const data = message.kind === 'pdf-url'
+    ? await capturePdfResource(message, sourceTabId)
+    : await capturePageResource(message)
+
+  if (!data) throw new Error('No PDF data was produced.')
+
+  const bucket = capturedByExport.get(message.exportId) || []
+  bucket.push({
+    title: message.title || 'Resource',
+    data,
+    itemId: message.itemId || null,
+    fileId: message.fileId || null,
+  })
+  capturedByExport.set(message.exportId, bucket)
+  return {ok: true, pagesPending: bucket.length}
 }
 
 async function buildReviewPdf(message) {
@@ -216,11 +356,11 @@ async function buildReviewPdf(message) {
   }
 }
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.source !== 'pdf-composer') return
 
   if (message.action === 'capture-canvas-resource') {
-    captureResource(message)
+    captureResource(message, sender?.tab?.id)
       .then(sendResponse)
       .catch((error) => sendResponse({ok: false, error: error?.message || String(error)}))
     return true
